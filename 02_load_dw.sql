@@ -1,451 +1,202 @@
--- Step 2: DW - Load data from source files into star schema tables
--- Run this after Step 1
-
-
--- ============================================================
--- 1. Load dim_book
--- ============================================================
-
-INSERT INTO dim_book (
-    book_key,
-    book_id,
-    title,
-    title_without_series,
-    isbn,
-    isbn13,
-    asin,
-    kindle_asin,
-    format,
-    edition_information,
-    is_ebook,
-    series,
-    publisher,
-    country_code,
-    language_code,
-    publication_year,
-    publication_month,
-    publication_day,
-    url,
-    image_url,
-    description
-)
-SELECT
-    ROW_NUMBER() OVER (ORDER BY book_id) AS book_key,
-
-    TRY_CAST(book_id AS INTEGER),
-
-    title,
-    title_without_series,
-
-    isbn,
-    isbn13,
-    asin,
-    kindle_asin,
-
-    format,
-    edition_information,
-
-    TRY_CAST(is_ebook AS BOOLEAN),
-
-    series,
-
-    publisher,
-    country_code,
-    language_code,
-
-    TRY_CAST(publication_year AS INTEGER),
-    TRY_CAST(publication_month AS INTEGER),
-    TRY_CAST(publication_day AS INTEGER),
-
-    url,
-    image_url,
-    description
-
-FROM read_json_auto($1);
-
-
--- ============================================================
--- 2. Load dim_work
--- ============================================================
-
+-- dim_work
 INSERT INTO dim_work (
-    work_key,
     work_id,
-    original_title,
-    original_publication_year,
-    original_publication_month,
-    original_publication_day,
-    original_language_id,
-    default_description_language_code,
-    media_type,
-    best_book_id,
-    default_chaptering_book_id,
-    books_count,
-    reviews_count,
-    ratings_count,
-    text_reviews_count,
-    ratings_sum
+    work_title,
+    work_books_count,
+    work_publication_year,
+    work_best_book_id,
+    work_ratings_count,
+    work_ratings_sum
 )
-SELECT
-    ROW_NUMBER() OVER (ORDER BY work_id) AS work_key,
-
-    TRY_CAST(work_id AS INTEGER),
-
-    original_title,
-
-    TRY_CAST(original_publication_year AS INTEGER),
-    TRY_CAST(original_publication_month AS INTEGER),
-    TRY_CAST(original_publication_day AS INTEGER),
-
-    original_language_id,
-    default_description_language_code,
-
-    media_type,
-
-    TRY_CAST(best_book_id AS INTEGER),
-    TRY_CAST(default_chaptering_book_id AS INTEGER),
-
-    TRY_CAST(books_count AS INTEGER),
-    TRY_CAST(reviews_count AS INTEGER),
-    TRY_CAST(ratings_count AS INTEGER),
-    TRY_CAST(text_reviews_count AS INTEGER),
-    TRY_CAST(ratings_sum AS INTEGER)
-
-FROM read_json_auto($2);
+SELECT 
+    TRY_CAST(work_id AS INTEGER) AS work_id,
+    original_title AS work_title,
+    TRY_CAST(books_count AS INTEGER) AS work_books_count,
+    TRY_CAST(original_publication_year AS INTEGER) AS work_publication_year,
+    TRY_CAST(best_book_id AS INTEGER) AS work_best_book_id,
+    TRY_CAST(ratings_count AS INTEGER) AS work_ratings_count,
+    TRY_CAST(ratings_sum AS INTEGER) AS work_ratings_sum
+FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_book_works.json.gz');
 
 
--- ============================================================
--- 3. Load dim_author
--- ============================================================
 
+-- dim_author
 INSERT INTO dim_author (
-    author_key,
     author_id,
-    name,
-    average_rating,
-    ratings_count,
-    text_reviews_count
+    author_name,
+    author_average_rating,
+    author_ratings_count
 )
-SELECT
-    ROW_NUMBER() OVER (ORDER BY author_id) AS author_key,
-
-    TRY_CAST(author_id AS INTEGER),
-
-    name,
-
-    TRY_CAST(average_rating AS DOUBLE),
-    TRY_CAST(ratings_count AS INTEGER),
-    TRY_CAST(text_reviews_count AS INTEGER)
-
-FROM read_json_auto($3);
+SELECT 
+    TRY_CAST(author_id AS INTEGER) AS author_id,
+    name AS author_name,
+    TRY_CAST(average_rating AS FLOAT) AS author_average_rating,
+    TRY_CAST(ratings_count AS INTEGER) AS author_ratings_count
+FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_book_authors.json.gz');
 
 
--- ============================================================
--- 4. Load dim_genre
--- ============================================================
-
-INSERT INTO dim_genre (
-    genre_key,
-    genre_name
+-- dim_series
+INSERT INTO dim_series (
+    series_id,
+    series_title,
+    series_works_count,
+    series_description
 )
-VALUES
-    (1, 'history, historical fiction, biography'),
-    (2, 'fiction'),
-    (3, 'fantasy, paranormal'),
-    (4, 'mystery, thriller, crime'),
-    (5, 'poetry'),
-    (6, 'romance'),
-    (7, 'non-fiction'),
-    (8, 'children'),
-    (9, 'young-adult'),
-    (10, 'comics, graphic');
+SELECT 
+    TRY_CAST(series_id AS INTEGER) AS series_id,
+    title AS series_title,
+    TRY_CAST(series_works_count AS INTEGER) AS series_works_count,
+    description AS series_description
+FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_book_series.json.gz');
 
 
--- ============================================================
--- 5. Load fact_book
--- ============================================================
 
-INSERT INTO fact_book (
-    book_key,
-    work_key,
-    average_rating,
-    ratings_count,
-    text_reviews_count,
-    num_pages
+-- top 5 genres
+WITH expanded AS (
+    SELECT 
+        TRY_CAST(book_id AS INTEGER) AS book_id,
+        UNNEST(genres)
+    FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_book_genres_initial.json.gz')
+),
+unpivoted AS (
+    UNPIVOT expanded
+    ON COLUMNS(* EXCLUDE (book_id))
+    INTO
+        NAME raw_genre_name
+        VALUE genre_vote
+),
+splitted AS (
+    SELECT 
+        book_id,
+        trim(UNNEST(string_split(raw_genre_name, ','))) AS genre_name,
+        TRY_CAST(genre_vote AS INTEGER) AS genre_vote
+    FROM unpivoted
+    WHERE TRY_CAST(genre_vote AS INTEGER) > 0
+),
+aggregated AS (
+    SELECT 
+        book_id,
+        genre_name,
+        SUM(genre_vote) AS total_vote
+    FROM splitted
+    GROUP BY book_id, genre_name
+),
+ranked AS (
+    SELECT 
+        book_id,
+        genre_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY book_id 
+            ORDER BY total_vote DESC
+        ) AS rank
+    FROM aggregated
+),
+array_genres AS (
+    SELECT 
+        book_id,
+        LIST(genre_name) AS top_5_genres
+    FROM (
+        SELECT * FROM ranked 
+        WHERE rank <= 5 
+        ORDER BY book_id, rank
+    )
+    GROUP BY book_id
+),
+final_genres AS (
+    SELECT 
+        book_id,
+        top_5_genres[1] AS genre_1,
+        top_5_genres[2] AS genre_2,
+        top_5_genres[3] AS genre_3,
+        top_5_genres[4] AS genre_4,
+        top_5_genres[5] AS genre_5
+    FROM array_genres
 )
-SELECT
-    b.book_key,
-
-    w.work_key,
-
-    TRY_CAST(src.average_rating AS DOUBLE),
-    TRY_CAST(src.ratings_count AS INTEGER),
-    TRY_CAST(src.text_reviews_count AS INTEGER),
-    TRY_CAST(src.num_pages AS INTEGER)
-
-FROM read_json_auto($1) AS src
-
-JOIN dim_book AS b
-    ON b.book_id = TRY_CAST(src.book_id AS INTEGER)
-
+-- dim_book
+INSERT INTO dim_book (
+    book_id,
+    book_title,
+    book_title_without_series,
+    book_country_code,
+    book_language_code,
+    book_average_rating,
+    book_ratings_count,
+    book_format,
+    book_publisher,
+    book_num_pages,
+    book_publication_year,
+    book_url,
+    book_image_url,
+    genre_1,
+    genre_2,
+    genre_3,
+    genre_4,
+    genre_5,
+    work_id
+)
+SELECT 
+    TRY_CAST(b.book_id AS INTEGER) AS book_id,
+    b.title AS book_title,
+    b.title_without_series AS book_title_without_series,
+    b.country_code AS book_country_code,
+    b.language_code AS book_language_code,
+    TRY_CAST(b.average_rating AS FLOAT) AS book_average_rating,
+    TRY_CAST(b.ratings_count AS INTEGER) AS book_ratings_count,
+    b.format AS book_format,
+    b.publisher AS book_publisher,
+    TRY_CAST(b.num_pages AS INTEGER) AS book_num_pages,
+    TRY_CAST(b.publication_year AS INTEGER) AS book_publication_year,
+    b.url AS book_url,
+    b.image_url AS book_image_url,
+    g.genre_1,
+    g.genre_2,
+    g.genre_3,
+    g.genre_4,
+    g.genre_5,
+    w.work_id AS work_id
+FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_books.json.gz') AS b -- $1 là đường dẫn file goodreads_books.json.gz
+LEFT JOIN final_genres AS g 
+    ON TRY_CAST(b.book_id AS INTEGER) = g.book_id
 LEFT JOIN dim_work AS w
-    ON w.work_id = TRY_CAST(src.work_id AS INTEGER);
+    ON TRY_CAST(b.work_id AS INTEGER) = w.work_id;
 
 
--- ============================================================
--- 6. Load book_author_bridge
--- ============================================================
 
-INSERT INTO book_author_bridge (
-    book_key,
-    author_key,
-    author_role
+-- fact_interaction
+INSERT INTO fact_interaction (
+    user_id,
+    book_id,
+    rating
 )
 SELECT
-    b.book_key,
+    i.user_id AS user_id,
+    TRY_CAST(i.book_id AS INTEGER) AS book_id,
+    TRY_CAST(i.rating AS INTEGER) AS rating
+FROM read_parquet(
+    'C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_interactions.parquet') AS i
+INNER JOIN dim_book AS b
+    ON TRY_CAST(i.book_id AS INTEGER) = b.book_id
+LIMIT 5000000;
 
-    a.author_key,
-
-    author.author_role
-
-FROM read_json_auto($1) AS src
-
-JOIN dim_book AS b
-    ON b.book_id = TRY_CAST(src.book_id AS INTEGER)
-
-CROSS JOIN UNNEST(src.authors)
-    AS author(author_id, author_role)
-
-JOIN dim_author AS a
-    ON a.author_id = TRY_CAST(author.author_id AS INTEGER);
-
-
--- ============================================================
--- 7. Load book_genre_bridge
--- ============================================================
-
-INSERT INTO book_genre_bridge (
-    book_key,
-    genre_key,
-    genre_count
+-- bridge_book_authors
+INSERT INTO bridge_book_authors (
+    book_id,
+    author_id
 )
-SELECT
-    b.book_key,
-    g.genre_key,
-
-    CASE g.genre_name
-
-        WHEN 'history, historical fiction, biography'
-            THEN src.genres."history, historical fiction, biography"
-
-        WHEN 'fiction'
-            THEN src.genres.fiction
-
-        WHEN 'fantasy, paranormal'
-            THEN src.genres."fantasy, paranormal"
-
-        WHEN 'mystery, thriller, crime'
-            THEN src.genres."mystery, thriller, crime"
-
-        WHEN 'poetry'
-            THEN src.genres.poetry
-
-        WHEN 'romance'
-            THEN src.genres.romance
-
-        WHEN 'non-fiction'
-            THEN src.genres."non-fiction"
-
-        WHEN 'children'
-            THEN src.genres.children
-
-        WHEN 'young-adult'
-            THEN src.genres."young-adult"
-
-        WHEN 'comics, graphic'
-            THEN src.genres."comics, graphic"
-
-    END AS genre_count
-
-FROM read_json_auto($4) AS src
-
-JOIN dim_book AS b
-    ON b.book_id = TRY_CAST(src.book_id AS INTEGER)
-
-CROSS JOIN dim_genre AS g
-
-WHERE CASE g.genre_name
-
-    WHEN 'history, historical fiction, biography'
-        THEN src.genres."history, historical fiction, biography"
-
-    WHEN 'fiction'
-        THEN src.genres.fiction
-
-    WHEN 'fantasy, paranormal'
-        THEN src.genres."fantasy, paranormal"
-
-    WHEN 'mystery, thriller, crime'
-        THEN src.genres."mystery, thriller, crime"
-
-    WHEN 'poetry'
-        THEN src.genres.poetry
-
-    WHEN 'romance'
-        THEN src.genres.romance
-
-    WHEN 'non-fiction'
-        THEN src.genres."non-fiction"
-
-    WHEN 'children'
-        THEN src.genres.children
-
-    WHEN 'young-adult'
-        THEN src.genres."young-adult"
-
-    WHEN 'comics, graphic'
-        THEN src.genres."comics, graphic"
-
-END IS NOT NULL;
-
-
--- ============================================================
--- 8. Verify data was loaded
--- ============================================================
-
-SELECT 'Book Dimension' AS table_name, COUNT(*) AS record_count
-FROM dim_book
-
-UNION ALL
-
-SELECT 'Work Dimension', COUNT(*)
-FROM dim_work
-
-UNION ALL
-
-SELECT 'Author Dimension', COUNT(*)
-FROM dim_author
-
-UNION ALL
-
-SELECT 'Genre Dimension', COUNT(*)
-FROM dim_genre
-
-UNION ALL
-
-SELECT 'Book Fact', COUNT(*)
-FROM fact_book
-
-UNION ALL
-
-SELECT 'Book Author Bridge', COUNT(*)
-FROM book_author_bridge
-
-UNION ALL
-
-SELECT 'Book Genre Bridge', COUNT(*)
-FROM book_genre_bridge;
-
-
--- ============================================================
--- 9. Referential integrity checks
--- ============================================================
-
-SELECT '=== Referential Integrity Check ===' AS info;
-
-
-SELECT
-    'Orphaned work_keys in fact_book' AS check_type,
-    COUNT(*) AS orphaned_count
-FROM fact_book
-WHERE work_key IS NOT NULL
-  AND work_key NOT IN (
-      SELECT work_key
-      FROM dim_work
-  );
-
-
-SELECT
-    'Orphaned book_keys in book_author_bridge' AS check_type,
-    COUNT(*) AS orphaned_count
-FROM book_author_bridge
-WHERE book_key NOT IN (
-    SELECT book_key
-    FROM dim_book
-);
-
-
-SELECT
-    'Orphaned author_keys in book_author_bridge' AS check_type,
-    COUNT(*) AS orphaned_count
-FROM book_author_bridge
-WHERE author_key NOT IN (
-    SELECT author_key
-    FROM dim_author
-);
-
-
-SELECT
-    'Orphaned book_keys in book_genre_bridge' AS check_type,
-    COUNT(*) AS orphaned_count
-FROM book_genre_bridge
-WHERE book_key NOT IN (
-    SELECT book_key
-    FROM dim_book
-);
-
-
-SELECT
-    'Orphaned genre_keys in book_genre_bridge' AS check_type,
-    COUNT(*) AS orphaned_count
-FROM book_genre_bridge
-WHERE genre_key NOT IN (
-    SELECT genre_key
-    FROM dim_genre
-);
-
-
--- ============================================================
--- 10. Show sample data
--- ============================================================
-
-SELECT '=== Book Dimension Sample ===' AS info;
-SELECT *
-FROM dim_book
-LIMIT 5;
-
-
-SELECT '=== Work Dimension Sample ===' AS info;
-SELECT *
-FROM dim_work
-LIMIT 5;
-
-
-SELECT '=== Author Dimension Sample ===' AS info;
-SELECT *
-FROM dim_author
-LIMIT 5;
-
-
-SELECT '=== Genre Dimension Sample ===' AS info;
-SELECT *
-FROM dim_genre
-LIMIT 5;
-
-
-SELECT '=== Book Fact Sample ===' AS info;
-SELECT *
-FROM fact_book
-LIMIT 5;
-
-
-SELECT '=== Book Author Bridge Sample ===' AS info;
-SELECT *
-FROM book_author_bridge
-LIMIT 5;
-
-
-SELECT '=== Book Genre Bridge Sample ===' AS info;
-SELECT *
-FROM book_genre_bridge
-LIMIT 5;
+SELECT DISTINCT
+    TRY_CAST(book_id AS INTEGER) AS book_id,
+    TRY_CAST(a.author_id AS INTEGER) AS author_id
+FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_books.json.gz')
+CROSS JOIN UNNEST(authors) AS temp(a);
+
+
+-- bridge_book_series
+INSERT INTO bridge_book_series (
+    book_id,
+    series_id
+)
+SELECT DISTINCT
+    TRY_CAST(book_id AS INTEGER) AS book_id,
+    TRY_CAST(s AS INTEGER) AS series_id
+FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_books.json.gz')
+CROSS JOIN UNNEST(series) AS temp(s);

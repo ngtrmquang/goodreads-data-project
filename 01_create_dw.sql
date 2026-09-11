@@ -16,9 +16,10 @@ CREATE TABLE dim_work (
     work_id INTEGER PRIMARY KEY,
     work_title VARCHAR,
     work_books_count INTEGER,
+    work_publication_year INTEGER,
     work_best_book_id INTEGER,
     work_ratings_count INTEGER,
-    work_ratings_sum INTEGER,
+    work_ratings_sum INTEGER
 );
 
 CREATE TABLE dim_book (
@@ -35,31 +36,28 @@ CREATE TABLE dim_book (
     book_publication_year INTEGER,
     book_url VARCHAR,
     book_image_url VARCHAR,
+    genre_1 VARCHAR,
+    genre_2 VARCHAR,
+    genre_3 VARCHAR,
+    genre_4 VARCHAR,
+    genre_5 VARCHAR,
     work_id INTEGER,
     FOREIGN KEY (work_id) REFERENCES dim_work(work_id)
 );
 
-ALTER TABLE dim_work 
-ADD CONSTRAINT fk_work_best_book 
-FOREIGN KEY (work_best_book_id) REFERENCES dim_book(book_id);
 
 CREATE TABLE dim_author (
     author_id INTEGER PRIMARY KEY,
     author_name VARCHAR,
     author_average_rating FLOAT,
-    author_ratings_count INTEGER,
+    author_ratings_count INTEGER
 );
 
 CREATE TABLE dim_series (
     series_id INTEGER PRIMARY KEY,
     series_title VARCHAR,
     series_works_count INTEGER,
-    series_description VARCHAR,
-);
-
-CREATE TABLE dim_genre (
-    genre_id INTEGER PRIMARY KEY,
-    genre_name VARCHAR,
+    series_description VARCHAR
 );
 
 CREATE TABLE fact_interaction (
@@ -72,10 +70,9 @@ CREATE TABLE fact_interaction (
 CREATE TABLE bridge_book_authors (
     book_id INTEGER,
     author_id INTEGER,
-    author_role VARCHAR,
     PRIMARY KEY (book_id, author_id),
     FOREIGN KEY (book_id) REFERENCES dim_book(book_id),
-    FOREIGN KEY (author_id) REFERENCES dim_author(author_id),
+    FOREIGN KEY (author_id) REFERENCES dim_author(author_id)
 );
 
 CREATE TABLE bridge_book_series (
@@ -86,13 +83,5 @@ CREATE TABLE bridge_book_series (
     FOREIGN KEY (series_id) REFERENCES dim_series(series_id)
 );
 
-CREATE TABLE bridge_book_genre (
-    book_id INTEGER,
-    genre_id INTEGER,
-    genre_vote INTEGER,
-    PRIMARY KEY (book_id, genre_id),
-    FOREIGN KEY (book_id) REFERENCES dim_book(book_id),
-    FOREIGN KEY (genre_id) REFERENCES dim_genre(genre_id),
-);
 
 SHOW TABLES;
