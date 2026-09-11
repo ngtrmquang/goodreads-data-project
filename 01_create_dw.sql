@@ -1,183 +1,98 @@
--- Step 1: DW - Create star schema tables (Data Warehouse)
--- Run this first
-
--- Set up initial configurations
 PRAGMA enable_progress_bar;
 PRAGMA enable_checkpoint_on_shutdown;
 
 
--- ============================================================
--- Drop existing tables if they exist
--- ============================================================
-
-DROP TABLE IF EXISTS book_author_bridge;
-DROP TABLE IF EXISTS book_genre_bridge;
-DROP TABLE IF EXISTS fact_book;
-
 DROP TABLE IF EXISTS dim_book;
 DROP TABLE IF EXISTS dim_work;
 DROP TABLE IF EXISTS dim_author;
+DROP TABLE IF EXISTS dim_series;
+DROP TABLE IF EXISTS fact_interaction;
 DROP TABLE IF EXISTS dim_genre;
-
-
--- ============================================================
--- Create dim_book table
--- Grain: One row per Goodreads book / edition
--- ============================================================
-
-CREATE TABLE dim_book (
-    book_key INTEGER PRIMARY KEY,
-    book_id INTEGER,
-
-    title VARCHAR,
-    title_without_series VARCHAR,
-
-    isbn VARCHAR,
-    isbn13 VARCHAR,
-    asin VARCHAR,
-    kindle_asin VARCHAR,
-
-    format VARCHAR,
-    edition_information VARCHAR,
-    is_ebook BOOLEAN,
-
-    series VARCHAR[],
-
-    publisher VARCHAR,
-    country_code VARCHAR,
-    language_code VARCHAR,
-
-    publication_year INTEGER,
-    publication_month INTEGER,
-    publication_day INTEGER,
-
-    url VARCHAR,
-    image_url VARCHAR,
-    description VARCHAR
-);
-
-
--- ============================================================
--- Create dim_work table
--- ============================================================
+DROP TABLE IF EXISTS bridge_book_authors;
+DROP TABLE IF EXISTS bridge_book_series;
+DROP TABLE IF EXISTS bridge_book_genre;
 
 CREATE TABLE dim_work (
-    work_key INTEGER PRIMARY KEY,
-    work_id INTEGER,
-
-    original_title VARCHAR,
-
-    original_publication_year INTEGER,
-    original_publication_month INTEGER,
-    original_publication_day INTEGER,
-
-    original_language_id VARCHAR,
-    default_description_language_code VARCHAR,
-
-    media_type VARCHAR,
-
-    best_book_id INTEGER,
-    default_chaptering_book_id INTEGER,
-
-    books_count INTEGER,
-    reviews_count INTEGER,
-    ratings_count INTEGER,
-    text_reviews_count INTEGER,
-    ratings_sum INTEGER
+    work_id INTEGER PRIMARY KEY,
+    work_title VARCHAR,
+    work_books_count INTEGER,
+    work_best_book_id INTEGER,
+    work_ratings_count INTEGER,
+    work_ratings_sum INTEGER,
 );
 
+CREATE TABLE dim_book (
+    book_id INTEGER PRIMARY KEY,
+    book_title VARCHAR,
+    book_title_without_series VARCHAR,
+    book_country_code VARCHAR,
+    book_language_code VARCHAR,
+    book_average_rating FLOAT,
+    book_ratings_count INTEGER,
+    book_format VARCHAR,
+    book_publisher VARCHAR,
+    book_num_pages INTEGER,
+    book_publication_year INTEGER,
+    book_url VARCHAR,
+    book_image_url VARCHAR,
+    work_id INTEGER,
+    FOREIGN KEY (work_id) REFERENCES dim_work(work_id)
+);
 
--- ============================================================
--- Create dim_author table
--- ============================================================
+ALTER TABLE dim_work 
+ADD CONSTRAINT fk_work_best_book 
+FOREIGN KEY (work_best_book_id) REFERENCES dim_book(book_id);
 
 CREATE TABLE dim_author (
-    author_key INTEGER PRIMARY KEY,
-    author_id INTEGER,
-
-    name VARCHAR,
-
-    average_rating DOUBLE,
-    ratings_count INTEGER,
-    text_reviews_count INTEGER
+    author_id INTEGER PRIMARY KEY,
+    author_name VARCHAR,
+    author_average_rating FLOAT,
+    author_ratings_count INTEGER,
 );
 
-
--- ============================================================
--- Create dim_genre table
--- ============================================================
+CREATE TABLE dim_series (
+    series_id INTEGER PRIMARY KEY,
+    series_title VARCHAR,
+    series_works_count INTEGER,
+    series_description VARCHAR,
+);
 
 CREATE TABLE dim_genre (
-    genre_key INTEGER PRIMARY KEY,
-    genre_name VARCHAR
+    genre_id INTEGER PRIMARY KEY,
+    genre_name VARCHAR,
 );
 
-
--- ============================================================
--- Create fact_book table
--- Grain: One row per Goodreads book / edition
--- ============================================================
-
-CREATE TABLE fact_book (
-    book_key INTEGER PRIMARY KEY,
-    work_key INTEGER,
-
-    average_rating DOUBLE,
-    ratings_count INTEGER,
-    text_reviews_count INTEGER,
-    num_pages INTEGER,
-
-    FOREIGN KEY (book_key)
-        REFERENCES dim_book(book_key),
-
-    FOREIGN KEY (work_key)
-        REFERENCES dim_work(work_key)
+CREATE TABLE fact_interaction (
+    user_id VARCHAR,
+    book_id INTEGER,
+    rating INTEGER,
+    FOREIGN KEY (book_id) REFERENCES dim_book(book_id)
 );
 
-
--- ============================================================
--- Create book_author_bridge table
--- Many-to-many: Book <-> Author
--- ============================================================
-
-CREATE TABLE book_author_bridge (
-    book_key INTEGER,
-    author_key INTEGER,
+CREATE TABLE bridge_book_authors (
+    book_id INTEGER,
+    author_id INTEGER,
     author_role VARCHAR,
-
-    PRIMARY KEY (book_key, author_key),
-
-    FOREIGN KEY (book_key)
-        REFERENCES dim_book(book_key),
-
-    FOREIGN KEY (author_key)
-        REFERENCES dim_author(author_key)
+    PRIMARY KEY (book_id, author_id),
+    FOREIGN KEY (book_id) REFERENCES dim_book(book_id),
+    FOREIGN KEY (author_id) REFERENCES dim_author(author_id),
 );
 
-
--- ============================================================
--- Create book_genre_bridge table
--- Many-to-many: Book <-> Genre
--- genre_count = count associated with the genre
--- ============================================================
-
-CREATE TABLE book_genre_bridge (
-    book_key INTEGER,
-    genre_key INTEGER,
-    genre_count INTEGER,
-
-    PRIMARY KEY (book_key, genre_key),
-
-    FOREIGN KEY (book_key)
-        REFERENCES dim_book(book_key),
-
-    FOREIGN KEY (genre_key)
-        REFERENCES dim_genre(genre_key)
+CREATE TABLE bridge_book_series (
+    book_id INTEGER,
+    series_id INTEGER,
+    PRIMARY KEY (book_id, series_id),
+    FOREIGN KEY (book_id) REFERENCES dim_book(book_id),
+    FOREIGN KEY (series_id) REFERENCES dim_series(series_id)
 );
 
-
--- ============================================================
--- Verify tables
--- ============================================================
+CREATE TABLE bridge_book_genre (
+    book_id INTEGER,
+    genre_id INTEGER,
+    genre_vote INTEGER,
+    PRIMARY KEY (book_id, genre_id),
+    FOREIGN KEY (book_id) REFERENCES dim_book(book_id),
+    FOREIGN KEY (genre_id) REFERENCES dim_genre(genre_id),
+);
 
 SHOW TABLES;
