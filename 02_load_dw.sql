@@ -1,3 +1,7 @@
+PRAGMA enable_progress_bar;
+PRAGMA enable_checkpoint_on_shutdown;
+
+
 -- dim_work
 INSERT INTO dim_work (
     work_id,
@@ -176,7 +180,7 @@ FROM read_parquet(
     'C:/Users/Quang/Documents/USTH/FundDS/dataset/goodreads_interactions.parquet') AS i
 INNER JOIN dim_book AS b
     ON TRY_CAST(i.book_id AS INTEGER) = b.book_id
-LIMIT 5000000;
+LIMIT 10000000;
 
 -- bridge_book_authors
 INSERT INTO bridge_book_authors (
