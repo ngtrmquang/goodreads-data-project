@@ -1,3 +1,7 @@
+PRAGMA enable_progress_bar;
+PRAGMA enable_checkpoint_on_shutdown;
+
+
 DROP SCHEMA IF EXISTS mart CASCADE;
 DROP TABLE IF EXISTS mart.book_statistics;
 DROP TABLE IF EXISTS mart.book_statistics;
