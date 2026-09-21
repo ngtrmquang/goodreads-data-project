@@ -1,4 +1,4 @@
-PRAGMA enable_progress_bar;
+PRAGMA enable_progress_bar; 
 PRAGMA enable_checkpoint_on_shutdown;
 
 

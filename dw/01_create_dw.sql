@@ -84,4 +84,4 @@ CREATE TABLE bridge_book_series (
 );
 
 
-SHOW TABLES;
+SHOW TABLES; 

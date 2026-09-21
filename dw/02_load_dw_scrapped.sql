@@ -1,4 +1,4 @@
-PRAGMA enable_progress_bar;
+PRAGMA enable_progress_bar; 
 PRAGMA enable_checkpoint_on_shutdown;
 
 
@@ -46,7 +46,7 @@ SELECT DISTINCT
     
     NULLIF(TRIM(Series), '') AS series_title
 
-FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/2026_09_16.json');
+FROM read_json('C:/Users/Quang/Documents/USTH/FundDS/dataset/2026_09_19.json');
 
 
 CREATE OR REPLACE TEMP TABLE temp_books AS

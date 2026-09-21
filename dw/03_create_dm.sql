@@ -1,5 +1,5 @@
 PRAGMA enable_progress_bar;
-PRAGMA enable_checkpoint_on_shutdown;
+PRAGMA enable_checkpoint_on_shutdown; 
 
 
 DROP SCHEMA IF EXISTS mart CASCADE;

@@ -1,4 +1,4 @@
-bonjour, je m'appelle Quang.
+bonjour, je m'appelle Quang. 
 
 1. terminal: duckdb goodread.duckdb
 
