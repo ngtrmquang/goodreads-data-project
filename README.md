@@ -64,7 +64,13 @@ Combining both sources, the project currently works with approximately:
 
 ## 4. Data Engineering Pipeline
 
-![pipeline](images/handwritten_pipeline.jpg)
+```
+01_create_dw.sql
+ └── 02_load_dw.sql     <--- [UCSD Datasets]
+      └── 02_load_dw_scrapped.sql       <--- [Scrapped Data]
+           └── 03_create_dm.sql
+                └── EDA
+```
 
 **Extract** — raw data comes from UCSD's `.json.gz` files plus the Apify-scraped Goodreads data.
 
@@ -101,13 +107,13 @@ We perform EDA at two levels: book-level and user-level, focusing on rating patt
 We analyze how book ratings are distributed, how popularity varies across books, and how rating stability changes with the number of ratings.
 
 <p align="center">
-  <img src="images/eda/Average_Rating_Histogram.png" width="48%">
-  <img src="images/eda/Ratings_Count_Histogram.png" width="48%">
+  <img src="images/Average_Rating_Histogram.png" width="48%">
+  <img src="images/Ratings_Count_Histogram.png" width="48%">
 </p>
 
 <p align="center">
-  <img src="images/eda/Top_10_Most_Rated_Books.png" width="48%">
-  <img src="images/eda/Top_10_books_by_Average_Rating.png" width="48%">
+  <img src="images/Top_10_Most_Rated_Books.png" width="48%">
+  <img src="images/Top_10_books_by_Average_Rating.png" width="48%">
 </p>
 
 Key observations:
@@ -120,13 +126,13 @@ Key observations:
 We examine user rating behavior, user activity, and the relationship between individual ratings and overall book ratings.
 
 <p align="center">
-  <img src="images/eda/user_rating_distribution.png" width="48%">
-  <img src="images/eda/Book_Popularity_Average_Rating.png" width="48%">
+  <img src="images/user_rating_distribution.png" width="48%">
+  <img src="images/Book_Popularity_Average_Rating.png" width="48%">
 </p>
 
 <p align="center">
-  <img src="images/eda/User_Activity_Average_Rating.png" width="48%">
-  <img src="images/eda/correlation_matrix.png" width="48%">
+  <img src="images/User_Activity_Average_Rating.png" width="48%">
+  <img src="images/correlation_matrix.png" width="48%">
 </p>
 
 Key observations:
