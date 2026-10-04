@@ -20,4 +20,4 @@ Mỗi người viết report riêng đầy đủ về project, tham khảo các 
 1. Tìm hiểu về project (cơ chế, cách làm,...)
 2. Code <được dùng AI miễn là hiểu đoạn code đấy làm j>
 
-![HBd C0f Ib MAAx0UL](https://i.ibb.co/sJd7V7MD/HBd-C0f-Ib-MAAx0-UL.jpg)
+![HBd C0f Ib MAAx0UL](https://i.ibb.co/sJd7V7MD/HBd-C0f-Ib-MAAx0-UL.jpg) 
