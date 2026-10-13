@@ -1,22 +1,18 @@
 # Goodreads Data Project
 
-### Book Rating and Reader Preference Analysis Using the Goodreads Dataset
+### Book Recommendation System Using the Goodreads Dataset
 
 ---
 
 ## 1. Overview
 
-This project looks at **book ratings and reader preferences** using large-scale Goodreads data.
+This project builds a **book recommendation system** on top of large-scale Goodreads data.
 
-It currently covers three stages: **Data Engineering**, building a **Data Warehouse**, and **Exploratory Data Analysis (EDA)**.
+It covers four stages: **Data Engineering**, building a **Data Warehouse**, **Exploratory Data Analysis (EDA)**, and **Recommendation Modeling**.
 
-The goal is to turn a set of fairly messy, heterogeneous Goodreads sources into a structured warehouse and a few analytical data marts, then use those to look for patterns in ratings, book popularity, and reader behavior.
+The goal is to turn a set of fairly messy, heterogeneous Goodreads sources into a structured warehouse and a few analytical data marts, use those to understand ratings, book popularity, and reader behavior, and then build and compare several recommender models that suggest books a reader is likely to enjoy.
 
-Down the line, these results are meant to feed into a **Book Recommendation System** (that part hasn't been built yet).
-
-> **Current scope:** Data Engineering → Data Warehouse → EDA
-
-> **Next up:** Book Recommendation System
+> **Scope:** Data Engineering → Data Warehouse → EDA → Recommendation Models
 
 ---
 
@@ -26,11 +22,13 @@ An average rating alone doesn't tell you much about how popular or how reliable 
 
 Two books can both sit at 4.5 stars, yet one has thousands of ratings and the other only a few dozen — same score, very different amount of evidence behind it.
 
-Readers also differ a lot in what they like — genre, author, series, language, publication era, or just how generously they rate. So the question this project tries to answer is:
+Readers also differ a lot in what they like — genre, author, series, language, publication era, or just how generously they rate. So the questions this project tries to answer are:
 
 > **What patterns show up in Goodreads ratings, book popularity, and reader preferences?**
+>
+> **Given what a reader has already liked, which unread books should we recommend?**
 
-Part of that is looking at how the number of ratings a book has relates to how stable its average rating is — useful context before trusting a high score that's only based on a handful of reviews.
+The second question is a **top-N recommendation** problem, not a rating-prediction problem. This shapes how the models are evaluated
 
 ---
 
@@ -48,7 +46,7 @@ Source: https://cseweb.ucsd.edu/~jmcauley/datasets/goodreads.html
 
 Since the UCSD dataset is an older snapshot, we also scrape more recent Goodreads data with **[Apify](https://apify.com/epctex/goodreads-scraper)** — book ID, title, author, rating, rating count, format, page count, publication date, publisher, language, series, Goodreads URL, and cover image.
 
-This scraped data is used to add new books, refresh rating info on books already in the warehouse, and fill in gaps left by the older UCSD snapshot. The scraping and update process is still being folded into one unified pipeline.
+This scraped data is used to add new books, refresh rating info on books already in the warehouse, and fill in gaps left by the older UCSD snapshot.
 
 ### 3.3 Dataset Scale
 
@@ -84,10 +82,10 @@ Combining both sources, the project currently works with approximately:
 
 ## 5. Analytical Data Marts
 
-Two marts sit on top of the warehouse for EDA:
+Two marts sit on top of the warehouse:
 
-- **`mart_book_statistics`** — book-level info (authors, series, genres, ratings, rating counts, publication info, page counts), used for book-level EDA.
-- **`mart_user_ratings`** — user rating info joined with book attributes, used to look at rating behavior, rating distributions, user activity, and how individual ratings relate to a book's overall rating.
+- **`mart_book_statistics`** — book-level info (authors, series, genres, ratings, rating counts, publication info, page counts), used for book-level EDA and as book metadata for the content-based model.
+- **`mart_user_ratings`** — user rating info joined with book attributes, used to look at rating behavior, rating distributions, user activity, and how individual ratings relate to a book's overall rating. A sampled version of the user–book interactions is the input to the recommender models.
 
 ---
 
@@ -142,6 +140,74 @@ Key observations:
 - Publication year shows almost no linear relationship with ratings.
 - Books with fewer ratings show greater variation in their average ratings, while ratings become more stable as the number of ratings increases.
 
+---
+
+## 8. Recommendation Models
+
+All modeling code is in [`03_model.ipynb`](model/03_model.ipynb).
+
+### 8.1 Data Preparation
+
+| Setting | Value |
+|---|---|
+| Minimum ratings per book | 100 |
+| Users sampled | 100,000 (a full 1M-user matrix does not fit in RAM) |
+| "Liked" threshold | rating ≥ 4 |
+| Split | Per user, random: **80% train / 10% validation / 10% test** |
+| Evaluation users | 1,000 users with at least one liked book in each of train, validation and test |
+| Cutoff | Top-K with **K = 10** |
+| Random seed | 67 |
+
+The split is done **per user**, so every user appears in all three sets. Books a user already rated (in train, and in train + validation when testing) are removed from the candidate list so the model never recommends something already read.
+
+### 8.2 Evaluation Protocol
+
+The task is to **recommend** books, not to **predict a star rating**. A model can predict ratings very accurately and still produce a poor top-10 list, and the other way round. For that reason the main metrics are ranking metrics:
+
+- **Precision@10** — of the 10 recommended books, the fraction the user actually liked in the held-out set.
+- **Recall@10** — of all the books the user liked in the held-out set, the fraction that appear in the top 10.
+
+We also report **MAE** and **RMSE** for the models that output a rating, so that rating-prediction quality can be compared with ranking quality. These are measured on all test ratings of the same 1,000 evaluation users. Models whose output is a ranking score rather than a star rating (ALS and the Hybrid) do not have MAE/RMSE.
+
+Hyperparameters and hybrid weights are chosen on the **validation** set, and final numbers are reported on the **test** set.
+
+### 8.3 Models
+
+| Model | Idea |
+|---|---|
+| **Popularity** (baseline) | Weighted rating `v/(v+m)·R + m/(v+m)·C` (the IMDb formula) with `m` = 80th percentile of rating counts. Same list for every user. |
+| **Item-based CF** | Cosine similarity between books over the binary "liked" matrix. Take up to 50 books the user liked, find their 100 nearest neighbors, and sum the similarities. |
+| **User-based CF** | Find the 200 users with the most similar liked-book history (squared cosine similarity) and score each book by the similarity-weighted votes of those users. |
+| **SVD** | Matrix factorization on explicit ratings (`scikit-surprise`). `n_factors` ∈ {20, 50, 100} chosen by validation RMSE; books are ranked by predicted rating. |
+| **ALS** | Implicit-feedback matrix factorization (`implicit`, 64 factors). Every rating is a positive signal; ratings ≥ 4 get confidence 3, others get 1. Score = dot product of user and book vectors. |
+| **Content-based** | TF-IDF vectors from book genres and/or authors, cosine nearest neighbors, same seed-book scoring as item-based CF. Three variants: Genre, Author, Genre + Author. |
+| **Hybrid** | Per-user min–max normalized scores of User-CF, Item-CF, Content (Genre + Author) and ALS, combined with a weighted sum. Six weight sets were tried and the one with the best validation Precision@10 was selected. |
+
+### 8.4 Results (test set, 1,000 evaluation users)
+
+| Model | MAE | RMSE | Precision@10 | Recall@10 |
+|---|---:|---:|---:|---:|
+| Popularity | 0.7403 | 0.9324 | 0.0039 | 0.0065 |
+| Item-CF | 0.6634 | 0.8607 | 0.0811 | 0.1647 |
+| User-CF | 0.7378 | 0.9460 | 0.0939 | 0.1880 |
+| SVD | **0.6451** | **0.8324** | 0.0001 | 0.0002 |
+| ALS | – | – | 0.1045 | 0.2095 |
+| CB (Genre) | 0.6912 | 0.8826 | 0.0005 | 0.0007 |
+| CB (Author) | 0.6332 | 0.8798 | 0.0131 | 0.0309 |
+| CB (Genre + Author) | 0.6696 | 0.8610 | 0.0098 | 0.0249 |
+| **Hybrid** (U0.2 / I0.2 / C0.1 / A0.5) | – | – | **0.1137** | **0.2260** |
+
+The selected hybrid weights are **User-CF 0.2, Item-CF 0.2, Content 0.1, ALS 0.5**.
+
+Key observations:
+- **Hybrid is the best recommender**, followed by ALS and User-CF. Combining collaborative signals with ALS gives a small but consistent gain over any single model.
+- **Rating accuracy and recommendation quality are different things.** SVD has the best MAE/RMSE of all models but almost zero Precision@10 and Recall@10. ALS and the Hybrid are the opposite: no rating error to report, but the best top-10 lists. This is why Precision@10 / Recall@10 are the main metrics of this project.
+- **Content-based models alone are weak**, since genre and author tags are coarse. Author is more informative than genre, and the combination adds little. They still contribute a small signal inside the Hybrid.
+
+
+### 8.5 Recommendation Demo
+
+`recommend_books(user_id, n=10)` returns a top-N table (rank, book ID, title, author, hybrid score, average rating, ratings count) for a user, excluding books they have already rated. For a user who is not in the training data, it falls back to the popularity ranking (cold start).
 
 ---
 
@@ -149,25 +215,27 @@ Key observations:
 
 | Technology | Purpose |
 |---|---|
-| Python | Data processing, scraping, EDA |
+| Python | Data processing, scraping, EDA, modeling |
 | SQL | Transformations, warehouse queries |
 | DuckDB | Data Warehouse |
-| Pandas | Analysis and data wrangling |
+| Pandas / NumPy / SciPy | Analysis, wrangling, sparse matrices |
+| scikit-learn | Nearest neighbors, TF-IDF |
+| scikit-surprise | SVD rating model |
+| implicit | ALS implicit-feedback model |
 | Matplotlib / Seaborn | EDA visualizations |
 | Apify | Goodreads scraping |
 | Parquet | Analytical data storage |
 | Git / GitHub | Version control, collaboration |
 
-
 ---
 
-## Future Work
+## Limitations and Future Work
 
-Right now the focus is on understanding and preparing the data. Next up is building a **Book Recommendation System** on top of the warehouse and EDA work already done.
-
-Possible directions: rating-based recommendations, user preference modeling, book similarity, genre/author preferences, deeper user–book interaction analysis, popularity-aware recommendations, and evaluating recommendation quality.
-
-The recommendation system itself **isn't built yet** — it's the planned final stage.
+- Models were trained and evaluated on a **sample of 100,000 users** and **1,000 evaluation users** because of memory limits; results on the full dataset may differ.
+- Evaluation uses a random per-user split, not a time-based one, so it does not reflect how a real system would see future behavior.
+- Hybrid weights come from a small manual grid; a learned combination (e.g. stacking) could do better.
+- Content-based features only use genres and authors. Adding descriptions, series, language or publication era may help cold-start books.
+- Possible additions: popularity-aware and diversity-aware re-ranking, deeper use of the scraped recent data, and a rating-scale calibration for ALS/Hybrid so that MAE/RMSE can be reported for them too.
 
 ---
 
@@ -176,3 +244,5 @@ The recommendation system itself **isn't built yet** — it's the planned final 
 - **UCSD Goodreads Dataset:** https://cseweb.ucsd.edu/~jmcauley/datasets/goodreads.html
 - **Goodreads:** https://www.goodreads.com/
 - **Apify:** https://apify.com/
+- **scikit-surprise:** https://surpriselib.com/
+- **implicit:** https://github.com/benfred/implicit
