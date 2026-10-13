@@ -144,7 +144,7 @@ Key observations:
 
 ## 8. Recommendation Models
 
-All modeling code is in [`03_model.ipynb`](model/03_model.ipynb).
+All modeling code is in [`03_model.ipynb`](03_model.ipynb).
 
 ### 8.1 Data Preparation
 
